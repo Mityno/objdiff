@@ -166,8 +166,8 @@ fn diff_text_ui(
         }
         DiffText::Symbol(sym) => sym.demangled_name.as_ref().unwrap_or(&sym.name).clone(),
         DiffText::Addend(addend) => match addend.cmp(&0i64) {
-            Ordering::Greater => format!("+{addend:#x}"),
-            Ordering::Less => format!("-{:#x}", -addend),
+            Ordering::Greater => format!(" + {addend:#x}"),
+            Ordering::Less => format!(" - {:#x}", -addend),
             _ => String::new(),
         },
         DiffText::Spacing(n) => {

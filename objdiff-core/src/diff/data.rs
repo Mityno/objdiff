@@ -221,6 +221,7 @@ pub fn no_diff_data_section(obj: &Object, section_idx: usize) -> Result<SectionD
         let range = reloc.address..reloc.address + reloc_len as u64;
         reloc_diffs.push(DataRelocationDiff {
             reloc: reloc.clone(),
+            target: None,
             kind: DataDiffKind::None,
             range,
         });
@@ -272,6 +273,7 @@ pub fn diff_data_section(
             let range = left_reloc.relocation.address..left_reloc.relocation.address + len as u64;
             left_reloc_diffs.push(DataRelocationDiff {
                 reloc: left_reloc.relocation.clone(),
+                target: None,
                 kind: diff_kind,
                 range,
             });
@@ -281,6 +283,7 @@ pub fn diff_data_section(
             let range = right_reloc.relocation.address..right_reloc.relocation.address + len as u64;
             right_reloc_diffs.push(DataRelocationDiff {
                 reloc: right_reloc.relocation.clone(),
+                target: None,
                 kind: diff_kind,
                 range,
             });
@@ -348,6 +351,7 @@ pub fn no_diff_data_symbol(obj: &Object, symbol_index: usize) -> Result<SymbolDi
         let range = reloc.address..reloc.address + reloc_len as u64;
         reloc_diffs.push(DataRelocationDiff {
             reloc: reloc.clone(),
+            target: None,
             kind: DataDiffKind::None,
             range,
         });
@@ -448,6 +452,9 @@ pub fn diff_data_symbol(
                     left_reloc.relocation.address..left_reloc.relocation.address + len as u64;
                 left_reloc_diffs.push(DataRelocationDiff {
                     reloc: left_reloc.relocation.clone(),
+                    target: right_reloc.map(|rr| {
+                        resolve_relocation(&right_obj.symbols, &rr.relocation).symbol.name.clone()
+                    }),
                     kind: diff_kind,
                     range,
                 });
@@ -458,6 +465,9 @@ pub fn diff_data_symbol(
                     right_reloc.relocation.address..right_reloc.relocation.address + len as u64;
                 right_reloc_diffs.push(DataRelocationDiff {
                     reloc: right_reloc.relocation.clone(),
+                    target: left_reloc.map(|rr| {
+                        resolve_relocation(&left_obj.symbols, &rr.relocation).symbol.name.clone()
+                    }),
                     kind: diff_kind,
                     range,
                 });

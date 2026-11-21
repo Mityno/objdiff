@@ -743,7 +743,7 @@ pub fn diff_view_ui(
                     let row_offset = i as u64 * BYTES_PER_ROW as u64;
                     row.col(|ui| {
                         if column == 0 {
-                            data_row_ui(
+                            if let Some(action) = data_row_ui(
                                 ui,
                                 Some(left_obj),
                                 left_symbol.address,
@@ -751,9 +751,11 @@ pub fn diff_view_ui(
                                 &left_symbol_diff.data_rows[i],
                                 appearance,
                                 column,
-                            );
+                            ) {
+                                ret = Some(action);
+                            }
                         } else if column == 1 {
-                            data_row_ui(
+                            if let Some(action) = data_row_ui(
                                 ui,
                                 Some(right_obj),
                                 right_symbol.address,
@@ -761,7 +763,9 @@ pub fn diff_view_ui(
                                 &right_symbol_diff.data_rows[i],
                                 appearance,
                                 column,
-                            );
+                            ) {
+                                ret = Some(action);
+                            }
                         }
                     });
                 },
@@ -1103,6 +1107,13 @@ pub fn context_menu_items_ui(
                         symbol_index,
                         column,
                     )));
+                    ui.close();
+                }
+            }
+            ContextItem::Replace { target, base } => {
+                if ui.button("Replace symbol @ position").clicked() {
+                    println!("{} VS {}", target, base);
+                    ret = Some(DiffViewAction::ReplacePosition(target, base));
                     ui.close();
                 }
             }

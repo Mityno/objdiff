@@ -411,7 +411,10 @@ impl GuestDisplay for Component {
         let Some(diff_row) = symbol_diff.data_rows.get(row_index as usize) else {
             return vec![];
         };
-        diff::display::data_row_context(obj, diff_row).into_iter().map(ContextItem::from).collect()
+        diff::display::data_row_context(obj, diff_row, None)
+            .into_iter()
+            .map(ContextItem::from)
+            .collect()
     }
 }
 
@@ -722,6 +725,7 @@ impl From<diff::display::ContextItem> for ContextItem {
                 })
             }
             diff::display::ContextItem::Separator => ContextItem::Separator,
+            _ => ContextItem::Separator,
         }
     }
 }

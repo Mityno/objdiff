@@ -7,7 +7,7 @@ use egui::{
 use egui_extras::{Column, TableBuilder};
 use objdiff_core::{
     diff::{
-        DiffObjConfig, ObjectDiff, ShowSymbolSizes, SymbolDiff,
+        DiffObjConfig, ObjectDiff, PreferredMatchingPercentSeparator, ShowSymbolSizes, SymbolDiff,
         display::{
             HighlightKind, SectionDisplay, SymbolFilter, SymbolNavigationKind, display_sections,
             symbol_context, symbol_hover,
@@ -73,6 +73,10 @@ pub enum DiffViewAction {
     SetDiffHighlight(usize, HighlightKind),
     /// Clear the highlight for all diff columns
     ClearDiffHighlight,
+    /// Replace a left symbol by a right symbol
+    ReplaceSymbol(usize),
+    /// Replace a symbol by the right one at the exact position
+    ReplacePosition(String, String),
     /// Start selecting a left symbol for mapping.
     /// The symbol reference is the right symbol to map to.
     SelectingLeft(SymbolRefByName),
@@ -108,6 +112,8 @@ pub enum DiffViewAction {
     },
     /// Only show results from the same object as the source symbol.
     SetSimilarSameObjectOnly(bool),
+    /// Get real address of a symbol
+    GetRealAddress(usize),
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
@@ -491,6 +497,51 @@ impl DiffViewState {
                 let Ok(state_guard) = state.read() else { return };
                 start_find_similar_job(ctx, jobs, &state_guard, source_symbol_name, column);
             }
+            DiffViewAction::ReplaceSymbol(symbol_idx) => {
+                let Some(result) = self.build.as_deref() else { return };
+                let Some((target_obj, _)) = result.first_obj.as_ref() else {
+                    return;
+                };
+                let Some(target_symbol) = target_obj.symbols.get(symbol_idx) else { return };
+                let target_symbol_name = target_symbol.name.clone();
+
+                let Ok(state) = state.read() else {
+                    return;
+                };
+
+                let Some(base_symbol_name) = state.get_symbol_mapping(&target_symbol_name) else {
+                    return;
+                };
+
+                state.replace_symbols(target_symbol_name, base_symbol_name);
+            }
+            DiffViewAction::ReplacePosition(target, base) => {
+                let Ok(state) = state.read() else {
+                    return;
+                };
+                state.replace_symbols(target, base);
+            }
+            DiffViewAction::GetRealAddress(symbol_idx) => {
+                let Ok(state) = state.read() else {
+                    return;
+                };
+                let Some(result) = self.build.as_deref() else { return };
+                let Some((target_obj, _)) = result.first_obj.as_ref() else {
+                    return;
+                };
+                let Some(target_symbol) = target_obj.symbols.get(symbol_idx) else {
+                    return;
+                };
+
+                let Some(version) = self.object_name.split("/").next().map(String::from) else {
+                    return;
+                };
+
+                if let Some(address) = state.get_real_symbol_address(&version, &target_symbol.name)
+                {
+                    ctx.copy_text(address);
+                }
+            }
         }
     }
 
@@ -650,6 +701,16 @@ pub fn symbol_context_menu_ui(
             ui.close();
         }
 
+        if column == 0 && ui.button("Replace symbol").clicked() {
+            ret = Some(DiffViewAction::ReplaceSymbol(symbol_idx));
+            ui.close();
+        }
+
+        if column == 0 && ui.button("Copy real address").clicked() {
+            ret = Some(DiffViewAction::GetRealAddress(symbol_idx));
+            ui.close();
+        }
+
         if section.is_some_and(|s| s.kind == SectionKind::Code)
             && ui.button("Find similar functions").clicked()
         {
@@ -722,14 +783,33 @@ fn symbol_ui(
         write_text("] ", appearance.text_color, &mut job, appearance.code_font.clone());
     }
     if let Some(match_percent) = symbol_diff.match_percent {
-        write_text("(", appearance.text_color, &mut job, appearance.code_font.clone());
+        if diff_config.preferred_matching_percent_separator
+            == PreferredMatchingPercentSeparator::Parenthesis
+        {
+            write_text("(", appearance.text_color, &mut job, appearance.code_font.clone());
+        }
+        let formatted_percent = if diff_config.spaced_matching_percent {
+            &format!("{:3.0}%", match_percent.floor())
+        } else {
+            &format!("{:.0}%", match_percent.floor())
+        };
         write_text(
-            &format!("{:.0}%", match_percent.floor()),
+            formatted_percent,
             match_color_for_symbol(match_percent, appearance),
             &mut job,
             appearance.code_font.clone(),
         );
-        write_text(") ", appearance.text_color, &mut job, appearance.code_font.clone());
+        let seperator = match diff_config.preferred_matching_percent_separator {
+            PreferredMatchingPercentSeparator::Parenthesis => ")",
+            PreferredMatchingPercentSeparator::Dash => " -",
+            PreferredMatchingPercentSeparator::Pipe => " |",
+        };
+        write_text(
+            &format!("{} ", seperator),
+            appearance.text_color,
+            &mut job,
+            appearance.code_font.clone(),
+        );
     }
     write_text(name, appearance.highlight_color, &mut job, appearance.code_font.clone());
     if diff_config.show_symbol_sizes == ShowSymbolSizes::Decimal {

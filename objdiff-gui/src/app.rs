@@ -3,6 +3,7 @@ use std::{
     default::Default,
     fs,
     path::{Path, PathBuf},
+    process::Command,
     rc::Rc,
     sync::{
         Arc, Mutex, RwLock,
@@ -24,6 +25,7 @@ use objdiff_core::{
     diff::DiffObjConfig,
     jobs::{Job, JobQueue, JobResult},
 };
+use regex::Regex;
 use time::UtcOffset;
 use typed_path::{Utf8PlatformPath, Utf8PlatformPathBuf};
 
@@ -388,6 +390,87 @@ impl AppState {
         }
         self.queue_reload = true;
         self.save_config();
+    }
+
+    pub fn get_symbol_mapping(&self, left: &String) -> Option<String> {
+        let Some(object) = self.config.selected_obj.as_ref() else {
+            log::warn!("No selected object");
+            return None;
+        };
+        object.symbol_mappings.get(left).map(|s| s.clone())
+    }
+
+    pub fn replace_symbols(&self, left: String, right: String) {
+        let Some(dir) = self.config.project_dir.clone() else {
+            log::warn!("No directory found.");
+            return;
+        };
+
+        log::info!("Executing command: `sed -i 's/{}/{}/g' {}/config/**/*.txt`", left, right, dir);
+
+        let output = Command::new("/usr/bin/find")
+            .arg(format!("{}", dir))
+            .arg("-type")
+            .arg("f")
+            .arg("-name")
+            .arg("symbols.txt")
+            .arg("-exec")
+            .arg("/usr/bin/sed")
+            .arg("-i")
+            .arg(format!("s/{}/{}/g", left, right))
+            .arg("{}")
+            .arg("+")
+            .output()
+            .unwrap();
+
+        if let Ok(stderr) = str::from_utf8(output.stderr.as_slice()).map(String::from)
+            && stderr.len() > 0
+        {
+            log::error!("STDERR: {}", stderr);
+        }
+    }
+
+    pub fn get_real_symbol_address(
+        &self,
+        version: &String,
+        symbol_name: &String,
+    ) -> Option<String> {
+        let Some(dir) = self.config.project_dir.clone() else {
+            log::warn!("No directory found.");
+            return None;
+        };
+
+        let path = format!("{}/config/{}", dir, version);
+        log::info!("Searching for symbol `{}` address in `{}`...", symbol_name, path);
+
+        let output = Command::new("/usr/bin/grep")
+            .arg("-R")
+            .arg(format!("{}", symbol_name))
+            .arg(format!("{}", path))
+            .output()
+            .unwrap();
+
+        if let Ok(stderr) = str::from_utf8(output.stderr.as_slice()).map(String::from)
+            && stderr.len() > 0
+        {
+            log::error!("STDERR: {}", stderr);
+        }
+
+        let Ok(stdout) = str::from_utf8(output.stdout.as_slice()).map(String::from) else {
+            return None;
+        };
+
+        if stdout.len() == 0 {
+            return None;
+        }
+
+        let re = Regex::new(r"addr:(0x[0-9a-fA-F]+)").unwrap();
+
+        if let Some((_, [match_str])) = re.captures(&stdout).map(|c| c.extract()) {
+            return Some(String::from(match_str));
+        }
+
+        return None;
     }
 
     pub fn clear_selection(&mut self) {

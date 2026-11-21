@@ -93,6 +93,7 @@ pub struct DataDiff {
 #[derive(Debug, Clone)]
 pub struct DataRelocationDiff {
     pub reloc: Relocation,
+    pub target: Option<String>,
     pub range: Range<u64>,
     pub kind: DataDiffKind,
 }

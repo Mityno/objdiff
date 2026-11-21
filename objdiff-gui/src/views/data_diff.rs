@@ -11,7 +11,7 @@ use objdiff_core::{
 };
 
 use super::diff::{context_menu_items_ui, hover_items_ui};
-use crate::views::{appearance::Appearance, write_text};
+use crate::views::{appearance::Appearance, symbol_diff::DiffViewAction, write_text};
 
 fn data_row_hover_ui(
     ui: &mut egui::Ui,
@@ -32,12 +32,13 @@ fn data_row_context_menu(
     diff_row: &DataDiffRow,
     column: usize,
     appearance: &Appearance,
-) {
+) -> Option<DiffViewAction> {
     ui.scope(|ui| {
         ui.style_mut().override_text_style = Some(egui::TextStyle::Monospace);
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-        context_menu_items_ui(ui, data_row_context(obj, diff_row), column, appearance);
-    });
+        context_menu_items_ui(ui, data_row_context(obj, diff_row, Some(column)), column, appearance)
+    })
+    .inner
 }
 
 fn get_color_for_diff_kind(diff_kind: DataDiffKind, appearance: &Appearance) -> egui::Color32 {
@@ -57,7 +58,7 @@ pub(crate) fn data_row_ui(
     diff_row: &DataDiffRow,
     appearance: &Appearance,
     column: usize,
-) {
+) -> Option<DiffViewAction> {
     if diff_row.segments.iter().any(|dd| dd.kind != DataDiffKind::None)
         || diff_row.relocations.iter().any(|rd| rd.kind != DataDiffKind::None)
     {
@@ -141,8 +142,12 @@ pub(crate) fn data_row_ui(
     }
 
     let response = Label::new(job).sense(Sense::click()).ui(ui);
+    let mut action = None;
     if let Some(obj) = obj {
-        response.context_menu(|ui| data_row_context_menu(ui, obj, diff_row, column, appearance));
+        response.context_menu(|ui| {
+            action = data_row_context_menu(ui, obj, diff_row, column, appearance);
+        });
         response.on_hover_ui_at_pointer(|ui| data_row_hover_ui(ui, obj, diff_row, appearance));
     }
+    action
 }
